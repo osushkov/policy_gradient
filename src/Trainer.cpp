@@ -30,23 +30,20 @@ struct PlayoutAgent {
   PlayoutAgent(LearningAgent *agent, ExperienceMemory *memory)
       : agent(agent), memory(memory) {}
 
-  bool havePreviousState(void) { return stateHistory.size() > 0; }
-
-  void addTransitionToMemory(EVector &curState, float reward, bool isTerminal) {
-    if (!havePreviousState()) {
-      return;
-    }
-
-    EVector &prevState = stateHistory[stateHistory.size() - 1];
-    GameAction &performedAction = actionHistory[actionHistory.size() - 1];
-
-    memory->AddExperience(ExperienceMoment(prevState, performedAction, curState,
-                                           reward, isTerminal));
-  }
-
   void addMoveToHistory(const EVector &state, const GameAction &action) {
     stateHistory.push_back(state);
     actionHistory.push_back(action);
+  }
+
+  void addHistoryToMemory(float finalReward) {
+    assert(stateHistory.size() == actionHistory.size());
+    float rewardDiscount = 0.98f;
+
+    for (int i = static_cast<int>(stateHistory.size() - 1); i >= 0; i--) {
+      memory->AddExperience(
+          ExperienceMoment(stateHistory[i], actionHistory[i], finalReward));
+      finalReward *= rewardDiscount;
+    }
   }
 };
 
@@ -63,19 +60,20 @@ struct Trainer::TrainerImpl {
         make_unique<ExperienceMemory>(EXPERIENCE_MEMORY_SIZE);
 
     uptr<LearningAgent> agent = make_unique<LearningAgent>();
-    trainAgent(agent.get(), experienceMemory.get(), iters, INITIAL_PRANDOM,
-               TARGET_PRANDOM);
+    trainAgent(agent.get(), experienceMemory.get(), iters, INITIAL_TEMPERATURE,
+               TARGET_TEMPERATURE);
 
     return move(agent);
   }
 
   void trainAgent(LearningAgent *agent, ExperienceMemory *memory,
-                  unsigned iters, float initialPRandom, float targetPRandom) {
+                  unsigned iters, float initialTemperature,
+                  float targetTemperature) {
 
     numLearnIters = 0;
 
-    std::thread playoutThread =
-        startPlayoutThread(agent, memory, iters, initialPRandom, targetPRandom);
+    std::thread playoutThread = startPlayoutThread(
+        agent, memory, iters, initialTemperature, targetTemperature);
 
     std::thread learnThread = startLearnThread(agent, memory, iters);
 
@@ -84,16 +82,14 @@ struct Trainer::TrainerImpl {
   }
 
   std::thread startPlayoutThread(LearningAgent *agent, ExperienceMemory *memory,
-                                 unsigned iters, float initialPRandom,
-                                 float targetPRandom) {
+                                 unsigned iters, float initialTemperature,
+                                 float targetTemperature) {
 
     return std::thread(
-        [this, agent, memory, iters, initialPRandom, targetPRandom]() {
-          float pRandDecay = powf(targetPRandom / initialPRandom, 1.0f / iters);
-          assert(pRandDecay > 0.0f && pRandDecay <= 1.0f);
-
-          // float tempDecay = powf(TARGET_TEMPERATURE / INITIAL_TEMPERATURE,
-          // 1.0f / iters); assert(tempDecay > 0.0f && tempDecay <= 1.0f);
+        [this, agent, memory, iters, initialTemperature, targetTemperature]() {
+          float temperatureDecay =
+              powf(targetTemperature / initialTemperature, 1.0f / iters);
+          assert(temperatureDecay > 0.0f && temperatureDecay <= 1.0f);
 
           while (true) {
             unsigned doneIters = numLearnIters.load();
@@ -101,10 +97,8 @@ struct Trainer::TrainerImpl {
               break;
             }
 
-            float prand = initialPRandom * powf(pRandDecay, doneIters);
-            // float temp = INITIAL_TEMPERATURE * powf(tempDecay, doneIters);
-            agent->SetPRandom(prand);
-            // agent->SetTemperature(temp);
+            float temp = initialTemperature * powf(temperatureDecay, doneIters);
+            agent->SetTemperature(temp);
 
             this->playoutRoundVsSelf(agent, memory);
             // this->playoutRoundVsRandom(agent, memory);
@@ -181,16 +175,14 @@ struct Trainer::TrainerImpl {
         PlayoutAgent &otherPlayer =
             playoutAgents[i * 2 + (curPlayerIndex + 1) % 2];
 
-        curPlayer.addTransitionToMemory(encodedState, 0.0f, false);
         curPlayer.addMoveToHistory(encodedState, actions[i]);
-
         curStates[i] = curStates[i].SuccessorState(actions[i]);
 
         switch (rules->GameCompletionState(curStates[i])) {
         case CompletionState::WIN:
           encodedState = LearningAgent::EncodeGameState(&curStates[i]);
-          curPlayer.addTransitionToMemory(encodedState, 1.0f, true);
-          otherPlayer.addTransitionToMemory(encodedState, -1.0f, true);
+          curPlayer.addHistoryToMemory(1.0f);
+          otherPlayer.addHistoryToMemory(-1.0);
           stateActive[i] = false;
           break;
         case CompletionState::LOSS:
@@ -198,8 +190,8 @@ struct Trainer::TrainerImpl {
           break;
         case CompletionState::DRAW:
           encodedState = LearningAgent::EncodeGameState(&curStates[i]);
-          curPlayer.addTransitionToMemory(encodedState, 0.0f, true);
-          otherPlayer.addTransitionToMemory(encodedState, 0.0f, true);
+          curPlayer.addHistoryToMemory(0.0f);
+          otherPlayer.addHistoryToMemory(0.0);
           stateActive[i] = false;
           break;
         case CompletionState::UNFINISHED:
@@ -215,91 +207,92 @@ struct Trainer::TrainerImpl {
     }
   }
 
-  void playoutRoundVsRandom(LearningAgent *agent, ExperienceMemory *memory) {
-    GameRules *rules = GameRules::Instance();
-
-    vector<PlayoutAgent> playoutAgents;
-    RandomAgent randomAgent;
-
-    GameState initialState = rules->InitialState();
-    EVector encodedInitialState = LearningAgent::EncodeGameState(&initialState);
-
-    vector<GameState> curStates;
-    for (unsigned i = 0; i < MOMENTS_BATCH_SIZE; i++) {
-      playoutAgents.emplace_back(agent, memory);
-      curStates.emplace_back(generateStartState());
-    }
-
-    vector<bool> stateActive(curStates.size(), true);
-
-    unsigned curPlayerIndex = rand() % 2;
-    while (true) {
-      vector<pair<GameState *, EVector>> encodedStates;
-      for (unsigned i = 0; i < curStates.size(); i++) {
-        if (stateActive[i]) {
-          encodedStates.emplace_back(
-              &curStates[i], LearningAgent::EncodeGameState(&curStates[i]));
-        } else {
-          encodedStates.emplace_back(&initialState, encodedInitialState);
-        }
-      }
-
-      vector<GameAction> actions;
-      if (curPlayerIndex == 0) {
-        actions = agent->SelectLearningActions(encodedStates);
-      } else {
-        for (unsigned i = 0; i < curStates.size(); i++) {
-          if (stateActive[i]) {
-            actions.push_back(randomAgent.SelectAction(&curStates[i]));
-          } else {
-            actions.push_back(GameAction::ACTION(0));
-          }
-        }
-      }
-
-      unsigned numActiveStates = 0;
-      for (unsigned i = 0; i < curStates.size(); i++) {
-        if (!stateActive[i]) {
-          continue;
-        }
-        numActiveStates++;
-
-        EVector encodedState = encodedStates[i].second;
-
-        if (curPlayerIndex == 0) {
-          playoutAgents[i].addTransitionToMemory(encodedState, 0.0f, false);
-          playoutAgents[i].addMoveToHistory(encodedState, actions[i]);
-        }
-
-        curStates[i] = curStates[i].SuccessorState(actions[i]);
-
-        switch (rules->GameCompletionState(curStates[i])) {
-        case CompletionState::WIN:
-          encodedState = LearningAgent::EncodeGameState(&curStates[i]);
-          playoutAgents[i].addTransitionToMemory(
-              encodedState, curPlayerIndex == 0 ? 1.0f : -1.0f, true);
-          stateActive[i] = false;
-          break;
-        case CompletionState::LOSS:
-          assert(false); // This actually shouldn't be possible.
-          break;
-        case CompletionState::DRAW:
-          encodedState = LearningAgent::EncodeGameState(&curStates[i]);
-          playoutAgents[i].addTransitionToMemory(encodedState, 0.0f, true);
-          stateActive[i] = false;
-          break;
-        case CompletionState::UNFINISHED:
-          curStates[i].FlipState();
-          break;
-        }
-      }
-
-      if (numActiveStates == 0) {
-        return;
-      }
-      curPlayerIndex = (curPlayerIndex + 1) % 2;
-    }
-  }
+  // void playoutRoundVsRandom(LearningAgent *agent, ExperienceMemory *memory) {
+  //   GameRules *rules = GameRules::Instance();
+  //
+  //   vector<PlayoutAgent> playoutAgents;
+  //   RandomAgent randomAgent;
+  //
+  //   GameState initialState = rules->InitialState();
+  //   EVector encodedInitialState =
+  //   LearningAgent::EncodeGameState(&initialState);
+  //
+  //   vector<GameState> curStates;
+  //   for (unsigned i = 0; i < MOMENTS_BATCH_SIZE; i++) {
+  //     playoutAgents.emplace_back(agent, memory);
+  //     curStates.emplace_back(generateStartState());
+  //   }
+  //
+  //   vector<bool> stateActive(curStates.size(), true);
+  //
+  //   unsigned curPlayerIndex = rand() % 2;
+  //   while (true) {
+  //     vector<pair<GameState *, EVector>> encodedStates;
+  //     for (unsigned i = 0; i < curStates.size(); i++) {
+  //       if (stateActive[i]) {
+  //         encodedStates.emplace_back(
+  //             &curStates[i], LearningAgent::EncodeGameState(&curStates[i]));
+  //       } else {
+  //         encodedStates.emplace_back(&initialState, encodedInitialState);
+  //       }
+  //     }
+  //
+  //     vector<GameAction> actions;
+  //     if (curPlayerIndex == 0) {
+  //       actions = agent->SelectLearningActions(encodedStates);
+  //     } else {
+  //       for (unsigned i = 0; i < curStates.size(); i++) {
+  //         if (stateActive[i]) {
+  //           actions.push_back(randomAgent.SelectAction(&curStates[i]));
+  //         } else {
+  //           actions.push_back(GameAction::ACTION(0));
+  //         }
+  //       }
+  //     }
+  //
+  //     unsigned numActiveStates = 0;
+  //     for (unsigned i = 0; i < curStates.size(); i++) {
+  //       if (!stateActive[i]) {
+  //         continue;
+  //       }
+  //       numActiveStates++;
+  //
+  //       EVector encodedState = encodedStates[i].second;
+  //
+  //       if (curPlayerIndex == 0) {
+  //         playoutAgents[i].addMoveToHistory(encodedState, actions[i], 0.0,
+  //                                           false);
+  //       }
+  //
+  //       curStates[i] = curStates[i].SuccessorState(actions[i]);
+  //
+  //       switch (rules->GameCompletionState(curStates[i])) {
+  //       case CompletionState::WIN:
+  //         encodedState = LearningAgent::EncodeGameState(&curStates[i]);
+  //         playoutAgents[i].addTransitionToMemory(
+  //             encodedState, curPlayerIndex == 0 ? 1.0f : -1.0f, true);
+  //         stateActive[i] = false;
+  //         break;
+  //       case CompletionState::LOSS:
+  //         assert(false); // This actually shouldn't be possible.
+  //         break;
+  //       case CompletionState::DRAW:
+  //         encodedState = LearningAgent::EncodeGameState(&curStates[i]);
+  //         playoutAgents[i].addTransitionToMemory(encodedState, 0.0f, true);
+  //         stateActive[i] = false;
+  //         break;
+  //       case CompletionState::UNFINISHED:
+  //         curStates[i].FlipState();
+  //         break;
+  //       }
+  //     }
+  //
+  //     if (numActiveStates == 0) {
+  //       return;
+  //     }
+  //     curPlayerIndex = (curPlayerIndex + 1) % 2;
+  //   }
+  // }
 
   GameState generateStartState(void) {
     GameRules *rules = GameRules::Instance();

@@ -11,14 +11,12 @@ namespace learning {
 struct ExperienceMoment {
   EVector initialState;
   GameAction actionTaken;
-  EVector successorState;
-  float reward;
-  bool isSuccessorTerminal;
+  float futureRewards;
 
   ExperienceMoment() = default;
-  ExperienceMoment(EVector initialState, GameAction actionTaken, EVector successorState,
-                   float reward, bool isSuccessorTerminal)
-      : initialState(initialState), actionTaken(actionTaken), successorState(successorState),
-        reward(reward), isSuccessorTerminal(isSuccessorTerminal) {}
+  ExperienceMoment(EVector initialState, GameAction actionTaken,
+                   float futureRewards)
+      : initialState(initialState), actionTaken(actionTaken),
+        futureRewards(futureRewards) {}
 };
 }

@@ -4,7 +4,8 @@
 
 using namespace learning;
 
-// How much memory to purge (as a ratio of max size) when the occupancy is saturated.
+// How much memory to purge (as a ratio of max size) when the occupancy is
+// saturated.
 static constexpr float PURGE_RATIO = 0.2f;
 
 ExperienceMemory::ExperienceMemory(unsigned maxSize)

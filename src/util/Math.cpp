@@ -4,7 +4,9 @@
 #include <cmath>
 #include <cstdlib>
 
-double util::RandInterval(double s, double e) { return s + (e - s) * (rand() / (double)RAND_MAX); }
+double util::RandInterval(double s, double e) {
+  return s + (e - s) * (rand() / (double)RAND_MAX);
+}
 
 double util::GaussianSample(double mean, double sd) {
   // Taken from GSL Library Gaussian random distribution.
@@ -46,7 +48,8 @@ std::vector<float> util::SoftmaxWeights(const std::vector<float> &in) {
   return result;
 }
 
-float util::SoftmaxWeightedAverage(const std::vector<float> &in, float temperature) {
+float util::SoftmaxWeightedAverage(const std::vector<float> &in,
+                                   float temperature) {
   assert(temperature > 0.0f);
 
   std::vector<float> tempAdjusted(in.size());
@@ -61,4 +64,27 @@ float util::SoftmaxWeightedAverage(const std::vector<float> &in, float temperatu
     result += weights[i] * in[i];
   }
   return result;
+}
+
+unsigned util::SoftmaxSample(const std::vector<float> &rawWeights,
+                             float temperature) {
+  assert(rawWeights.size() > 0);
+  assert(temperature > 0.0f);
+
+  std::vector<float> adjusted;
+  for (auto rw : rawWeights) {
+    adjusted.emplace_back(rw / temperature);
+  }
+
+  adjusted = SoftmaxWeights(adjusted);
+  float s = util::RandInterval(0.0f, 1.0f);
+
+  for (unsigned i = 0; i < adjusted.size(); i++) {
+    if (adjusted[i] >= s) {
+      return i;
+    }
+    s -= adjusted[i];
+  }
+
+  return rawWeights.size() - 1;
 }

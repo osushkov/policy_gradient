@@ -1,15 +1,15 @@
 
 #pragma once
 
-#include "../util/Common.hpp"
 #include "../connectfour/GameAction.hpp"
 #include "../connectfour/GameState.hpp"
+#include "../util/Common.hpp"
 #include "Agent.hpp"
 #include "ExperienceMoment.hpp"
 
 #include <iostream>
-#include <vector>
 #include <utility>
+#include <vector>
 
 using namespace connectfour;
 
@@ -27,16 +27,14 @@ public:
 
   GameAction SelectAction(const GameState *state) override;
 
-  void SetPRandom(float pRandom);
   void SetTemperature(float temperature);
 
-  vector<GameAction> SelectLearningActions(const vector<pair<GameState*, EVector>> &states);
+  vector<GameAction>
+  SelectLearningActions(const vector<pair<GameState *, EVector>> &states);
+
   void Learn(const vector<ExperienceMoment> &moments, float learnRate);
 
   void Finalise(void);
-
-  // This is for debugging.
-  float GetQValue(const GameState &state, const GameAction &action);
 
 private:
   struct LearningAgentImpl;

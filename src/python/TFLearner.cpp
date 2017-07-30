@@ -15,9 +15,8 @@ public:
   LearnerInstance() = default;
   virtual ~LearnerInstance() = default;
 
-  virtual void Learn(const QLearnBatch &batch) = 0;
-  virtual void UpdateTargetParams(void) = 0;
-  virtual np::ndarray QFunction(const np::ndarray &state) = 0;
+  virtual void Learn(const PolicyLearnBatch &batch) = 0;
+  virtual np::ndarray PolicyFunction(const np::ndarray &state) = 0;
 };
 
 class PyLearnerInstance final : public LearnerInstance,
@@ -25,16 +24,12 @@ class PyLearnerInstance final : public LearnerInstance,
 public:
   using LearnerInstance::LearnerInstance;
 
-  void Learn(const QLearnBatch &batch) override {
+  void Learn(const PolicyLearnBatch &batch) override {
     get_override("Learn")(batch);
   }
 
-  void UpdateTargetParams(void) override {
-    get_override("UpdateTargetParams")();
-  }
-
-  np::ndarray QFunction(const np::ndarray &state) override {
-    return get_override("QFunction")(state);
+  np::ndarray PolicyFunction(const np::ndarray &state) override {
+    return get_override("PolicyFunction")(state);
   }
 };
 
@@ -46,14 +41,11 @@ BOOST_PYTHON_MODULE(LearnerFramework) {
       .def_readonly("numOutputs", &NetworkSpec::numOutputs)
       .def_readonly("maxBatchSize", &NetworkSpec::maxBatchSize);
 
-  bp::class_<QLearnBatch>("QLearnBatch")
-      .def_readonly("initialStates", &QLearnBatch::initialStates)
-      .def_readonly("successorStates", &QLearnBatch::successorStates)
-      .def_readonly("actionsTaken", &QLearnBatch::actionsTaken)
-      .def_readonly("isEndStateTerminal", &QLearnBatch::isEndStateTerminal)
-      .def_readonly("rewardsGained", &QLearnBatch::rewardsGained)
-      .def_readonly("futureRewardDiscount", &QLearnBatch::futureRewardDiscount)
-      .def_readonly("learnRate", &QLearnBatch::learnRate);
+  bp::class_<PolicyLearnBatch>("PolicyLearnBatch")
+      .def_readonly("initialStates", &PolicyLearnBatch::initialStates)
+      .def_readonly("actionsTaken", &PolicyLearnBatch::actionsTaken)
+      .def_readonly("rewardsGained", &PolicyLearnBatch::rewardsGained)
+      .def_readonly("learnRate", &PolicyLearnBatch::learnRate);
 
   bp::class_<PyLearnerInstance, boost::noncopyable>("LearnerInstance");
 }
@@ -78,7 +70,7 @@ struct TFLearner::TFLearnerImpl {
     }
   }
 
-  void Learn(const QLearnBatch &batch) {
+  void Learn(const PolicyLearnBatch &batch) {
     try {
       learner.attr("Learn")(batch);
     } catch (const bp::error_already_set &e) {
@@ -87,18 +79,9 @@ struct TFLearner::TFLearnerImpl {
     }
   }
 
-  void UpdateTargetParams(void) {
+  np::ndarray PolicyFunction(const np::ndarray &state) {
     try {
-      learner.attr("UpdateTargetParams")();
-    } catch (const bp::error_already_set &e) {
-      std::cerr << std::endl << python::ParseException() << std::endl;
-      throw e;
-    }
-  }
-
-  np::ndarray QFunction(const np::ndarray &state) {
-    try {
-      return bp::extract<np::ndarray>(learner.attr("QFunction")(state));
+      return bp::extract<np::ndarray>(learner.attr("PolicyFunction")(state));
     } catch (const bp::error_already_set &e) {
       std::cerr << std::endl << python::ParseException() << std::endl;
       throw e;
@@ -112,10 +95,8 @@ TFLearner::TFLearner(const NetworkSpec &spec) {
 
 TFLearner::~TFLearner() = default;
 
-void TFLearner::Learn(const QLearnBatch &batch) { impl->Learn(batch); }
+void TFLearner::Learn(const PolicyLearnBatch &batch) { impl->Learn(batch); }
 
-void TFLearner::UpdateTargetParams(void) { impl->UpdateTargetParams(); }
-
-np::ndarray TFLearner::QFunction(const np::ndarray &state) {
-  return impl->QFunction(state);
+np::ndarray TFLearner::PolicyFunction(const np::ndarray &state) {
+  return impl->PolicyFunction(state);
 }
