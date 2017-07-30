@@ -1,0 +1,8 @@
+include_rules
+: src/*.o \
+src/thirdparty/thirdparty.a \
+src/learning/learning.a \
+src/python/python.a \
+src/connectfour/connectfour.a \
+src/util/util.a \
+|> $(CC) $(CCFLAGS) %f -o %o $(CLFLAGS) |> policy_gradient

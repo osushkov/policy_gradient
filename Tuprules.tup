@@ -1,0 +1,22 @@
+CC = g++
+
+CCFLAGS += -std=c++11
+CCFLAGS += -I/usr/local/include -I/usr/include/eigen3 -I/usr/include/eigen3 -I/usr/include/python2.7
+CCFLAGS += -I/home/osushkov/Programming/boost_1_64_0
+CCFLAGS += -Wall -Wno-deprecated-declarations -Wno-unused-variable
+
+ifdef RELEASE
+  CCFLAGS += -Ofast
+endif
+
+ifdef DEBUG
+  CCFLAGS += -g
+endif
+
+CLFLAGS += -L/usr/local/lib
+CLFLAGS += -L/home/osushkov/Programming/boost_1_64_0/stage/lib
+CLFLAGS += -L/usr/lib/python2.7/config
+
+CLFLAGS += -lpthread
+CLFLAGS += -lboost_system -lboost_thread
+CLFLAGS += -lboost_python -lboost_numpy -lpython2.7
