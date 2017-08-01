@@ -25,12 +25,12 @@ public:
   static uptr<LearningAgent> Read(std::istream &in);
   void Write(std::ostream &out);
 
+  void SetExploration(float exploration);
+
   GameAction SelectAction(const GameState *state) override;
 
-  void SetTemperature(float temperature);
-
-  vector<GameAction>
-  SelectLearningActions(const vector<pair<GameState *, EVector>> &states);
+  vector<GameAction> SelectLearningActions(
+    const vector<pair<GameState *, EVector>> &states);
 
   void Learn(const vector<ExperienceMoment> &moments, float learnRate);
 

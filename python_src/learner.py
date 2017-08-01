@@ -64,21 +64,25 @@ class Learner(LearnerInstance):
                 num_inputs = self.learn_network[-1].layer_size
                 input_tensor = self.learn_network[-1].layer_output
 
-            self.learn_network.append(NNLayer(num_inputs, ls, tf.nn.elu, input_tensor))
+            self.learn_network.append(NNLayer(num_inputs, ls, tf.nn.tanh, input_tensor))
 
         pl = self.learn_network[-1]
         self.learn_network.append(NNLayer(pl.layer_size, self.num_outputs, tf.identity, pl.layer_output))
         self.learn_network_output = self.learn_network[-1].layer_output
 
-        index_range = tf.constant(np.arange(self.max_batch_size), dtype=tf.int32)
-        action_indices = tf.stack([index_range, self.learn_network_action_index], axis=1)
-        self.indexed_output = tf.gather_nd(self.learn_network_output, action_indices)
+        self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=self.learn_network_output, labels=self.learn_network_action_index)
+        self.loss = tf.reduce_mean(self.loss * self.learn_network_reward)
+        # average_reward = tf.reduce_mean(self.learn_network_reward)
 
-        self.cost = tf.negative(tf.reduce_mean(self.learn_network_reward * self.indexed_output))
+        opt = tf.train.AdamOptimizer(0.0001)
+        # opt = tf.train.GradientDescentOptimizer(self.learn_rate)
+        gradients = opt.compute_gradients(self.loss)
+        # for i, (grad, var) in enumerate(gradients):
+        #     if grad is not None:
+        #         gradients[i] = (grad * average_reward, var)
 
-        # opt = tf.train.AdamOptimizer(self.learn_rate)
-        opt = tf.train.GradientDescentOptimizer(self.learn_rate)
-        self.learn_optimizer = opt.minimize(self.cost)
+        self.learn_optimizer =  opt.apply_gradients(gradients)
 
 
     def Learn(self, batch):
@@ -117,5 +121,7 @@ class Learner(LearnerInstance):
         assert (state.shape[0] == self.max_batch_size and state.shape[1] == self.num_inputs)
 
         with self.sess.as_default():
-            feed_dict = {self.learn_network_input: state}
+            feed_dict = {
+                self.learn_network_input: state,
+            }
             return self.sess.run([self.learn_network_output], feed_dict=feed_dict)[0][:original_input_size, :]

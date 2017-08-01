@@ -16,4 +16,6 @@ std::vector<float> SoftmaxWeights(const std::vector<float> &in);
 float SoftmaxWeightedAverage(const std::vector<float> &in, float temperature);
 
 unsigned SoftmaxSample(const std::vector<float> &rawWeights, float temperature);
+
+unsigned SampleFromDistribution(const std::vector<float> &weights);
 }

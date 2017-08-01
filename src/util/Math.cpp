@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <iostream>
 
 double util::RandInterval(double s, double e) {
   return s + (e - s) * (rand() / (double)RAND_MAX);
@@ -87,4 +88,23 @@ unsigned util::SoftmaxSample(const std::vector<float> &rawWeights,
   }
 
   return rawWeights.size() - 1;
+}
+
+unsigned util::SampleFromDistribution(const std::vector<float> &weights) {
+  assert(weights.size() > 0);
+  float s = util::RandInterval(0.0f, 1.0f);
+
+  // for (auto w : weights) {
+  //   std::cout << " " << w;
+  // }
+  // std::cout << std::endl;
+
+  for (unsigned i = 0; i < weights.size(); i++) {
+    if (weights[i] >= s) {
+      return i;
+    }
+    s -= weights[i];
+  }
+
+  return weights.size() - 1;
 }

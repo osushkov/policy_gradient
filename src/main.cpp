@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     if (iters % 20000 == 0) {
       learning::RandomAgent randomAgent;
       MinMaxAgent minmaxAgent(3);
-      auto rar = evaluateAgent(agent, &minmaxAgent);
+      auto rar = evaluateAgent(agent, &randomAgent);
       std::cout << "random " << iters << "\t" << rar.first << "-" << rar.second
                 << std::endl;
 

@@ -15,12 +15,12 @@ using namespace learning;
 using namespace std;
 
 struct LearningAgent::LearningAgentImpl {
-  float temperature;
+  float exploration;
 
   python::PythonThreadContext ptctx;
   uptr<python::TFLearner> learner;
 
-  LearningAgentImpl() : temperature(1.0f), ptctx(python::GlobalContext()) {
+  LearningAgentImpl() : exploration(0.0f), ptctx(python::GlobalContext()) {
     python::PythonContextLock pl(ptctx);
 
     python::NetworkSpec spec(BOARD_WIDTH * BOARD_HEIGHT * 2,
@@ -32,12 +32,18 @@ struct LearningAgent::LearningAgentImpl {
 
   GameAction SelectAction(const GameState *state) {
     assert(state != nullptr);
-    return sampleAction(*state, LearningAgent::EncodeGameState(state), 0.001f);
+    return sampleAction(*state, LearningAgent::EncodeGameState(state));
   }
 
   vector<GameAction>
   SelectLearningActions(const vector<pair<GameState *, EVector>> &states) {
-    return sampleActions(states, temperature);
+    auto actions = sampleActions(states);
+    for (unsigned i = 0; i < actions.size(); i++) {
+      if (util::RandInterval(0.0, 1.0) < exploration) {
+        actions[i] = chooseExplorativeAction(*states[i].first);
+      }
+    }
+    return actions;
   }
 
   void Learn(const vector<ExperienceMoment> &moments, float learnRate) {
@@ -68,11 +74,11 @@ struct LearningAgent::LearningAgentImpl {
 
     return python::PolicyLearnBatch(python::ToNumpy(initialStates),
                                     python::ToNumpy(actionsTaken),
-                                    python::ToNumpy(rewardsGained), learnRate);
+                                    python::ToNumpy(rewardsGained),
+                                    learnRate);
   }
 
-  GameAction sampleAction(const GameState &state, const EVector &encodedState,
-                          float temperature) {
+  GameAction sampleAction(const GameState &state, const EVector &encodedState) {
     EMatrix policyValues = learnerInference(encodedState);
     vector<unsigned> availableActions = state.AvailableActions();
     assert(availableActions.size() > 0);
@@ -82,13 +88,11 @@ struct LearningAgent::LearningAgentImpl {
       actionWeights.emplace_back(policyValues(0, availableActions[i]));
     }
 
-    unsigned sampledIndex = util::SoftmaxSample(actionWeights, temperature);
+    unsigned sampledIndex = util::SoftmaxSample(actionWeights, 0.01f);
     return GameAction::ACTION(availableActions[sampledIndex]);
   }
 
-  vector<GameAction>
-  sampleActions(const vector<pair<GameState *, EVector>> &states,
-                float temperature) {
+  vector<GameAction> sampleActions(const vector<pair<GameState *, EVector>> &states) {
     assert(states.size() <= MOMENTS_BATCH_SIZE);
 
     EMatrix encodedStates(states.size(), BOARD_WIDTH * BOARD_HEIGHT * 2);
@@ -109,7 +113,7 @@ struct LearningAgent::LearningAgentImpl {
         actionWeights.emplace_back(policyValues(0, availableActions[i]));
       }
 
-      unsigned sampledIndex = util::SoftmaxSample(actionWeights, temperature);
+      unsigned sampledIndex = util::SoftmaxSample(actionWeights, 1.0f);
       result.emplace_back(GameAction::ACTION(availableActions[sampledIndex]));
     }
 
@@ -187,8 +191,8 @@ GameAction LearningAgent::SelectAction(const GameState *state) {
   return impl->SelectAction(state);
 }
 
-void LearningAgent::SetTemperature(float temperature) {
-  impl->temperature = temperature;
+void LearningAgent::SetExploration(float exploration) {
+  impl->exploration = exploration;
 }
 
 vector<GameAction> LearningAgent::SelectLearningActions(

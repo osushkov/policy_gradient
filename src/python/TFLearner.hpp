@@ -23,7 +23,8 @@ struct PolicyLearnBatch {
 
   PolicyLearnBatch(const np::ndarray &initialStates,
                    const np::ndarray &actionsTaken,
-                   const np::ndarray &rewardsGained, float learnRate)
+                   const np::ndarray &rewardsGained,
+                   float learnRate)
       : initialStates(initialStates), actionsTaken(actionsTaken),
         rewardsGained(rewardsGained), learnRate(learnRate) {
     assert(learnRate > 0.0f);
@@ -32,7 +33,6 @@ struct PolicyLearnBatch {
   np::ndarray initialStates;
   np::ndarray actionsTaken;  // action indices
   np::ndarray rewardsGained; // floats
-
   float learnRate;
 };
 
