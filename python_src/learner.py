@@ -67,7 +67,7 @@ class Learner(LearnerInstance):
             self.learn_network.append(NNLayer(num_inputs, ls, tf.nn.elu, input_tensor))
 
         pl = self.learn_network[-1]
-        self.learn_network.append(NNLayer(pl.layer_size, self.num_outputs, tf.nn.sigmoid, pl.layer_output))
+        self.learn_network.append(NNLayer(pl.layer_size, self.num_outputs, tf.identity, pl.layer_output))
         self.learn_network_output = self.learn_network[-1].layer_output
 
         index_range = tf.constant(np.arange(self.max_batch_size), dtype=tf.int32)

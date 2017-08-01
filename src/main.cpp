@@ -40,10 +40,12 @@ int main(int argc, char **argv) {
     if (iters % 5000 == 0) {
       cout << "iters: " << iters << endl;
     }
-    if (iters % 5000 == 0) {
+    if (iters % 20000 == 0) {
       learning::RandomAgent randomAgent;
-      auto rar = evaluateAgent(agent, &randomAgent);
-      std::cout << "random " << iters << "\t" << rar.first << std::endl;
+      MinMaxAgent minmaxAgent(3);
+      auto rar = evaluateAgent(agent, &minmaxAgent);
+      std::cout << "random " << iters << "\t" << rar.first << "-" << rar.second
+                << std::endl;
 
       // MinMaxAgent minmaxAgent1(1);
       // auto mar1 = evaluateAgent(agent, &minmaxAgent1);
@@ -59,7 +61,7 @@ int main(int argc, char **argv) {
     }
   });
 
-  auto trainedAgent = trainer.TrainAgent(200000);
+  auto trainedAgent = trainer.TrainAgent(10000000);
 
   // std::ofstream saveFile("agent.dat");
   // trainedAgent->Write(saveFile);
