@@ -48,6 +48,7 @@ struct LearningAgent::LearningAgentImpl {
 
   void Learn(const vector<ExperienceMoment> &moments, float learnRate) {
     learner->Learn(makePolicyBatch(moments, learnRate));
+    learner->LearnValue(makeValueBatch(moments, learnRate));
   }
 
   void Finalise(void) {
@@ -78,6 +79,21 @@ struct LearningAgent::LearningAgentImpl {
                                     learnRate);
   }
 
+  python::ValueLearnBatch
+  makeValueBatch(const vector<ExperienceMoment> &moments, float learnRate) {
+    EMatrix states(moments.size(), BOARD_WIDTH * BOARD_HEIGHT * 2);
+    vector<float> rewardsGained(moments.size());
+
+    for (unsigned i = 0; i < moments.size(); i++) {
+      states.row(i) = moments[i].initialState;
+      rewardsGained[i] = moments[i].futureRewards;
+    }
+
+    return python::ValueLearnBatch(python::ToNumpy(states),
+                                   python::ToNumpy(rewardsGained),
+                                   learnRate);
+  }
+
   GameAction sampleAction(const GameState &state, const EVector &encodedState) {
     EMatrix policyValues = learnerInference(encodedState);
     vector<unsigned> availableActions = state.AvailableActions();
@@ -88,8 +104,17 @@ struct LearningAgent::LearningAgentImpl {
       actionWeights.emplace_back(policyValues(0, availableActions[i]));
     }
 
-    unsigned sampledIndex = util::SoftmaxSample(actionWeights, 0.01f);
-    return GameAction::ACTION(availableActions[sampledIndex]);
+    // unsigned bestIndex = 0;
+    // float bestWeight = actionWeights[0];
+    // for (unsigned i = 1; i < actionWeights.size(); i++) {
+    //   if (actionWeights[i] > bestWeight) {
+    //     bestWeight = actionWeights[i];
+    //     bestIndex = i;
+    //   }
+    // }
+
+    unsigned bestIndex = util::SoftmaxSample(actionWeights, 0.1);
+    return GameAction::ACTION(availableActions[bestIndex]);
   }
 
   vector<GameAction> sampleActions(const vector<pair<GameState *, EVector>> &states) {
@@ -113,7 +138,7 @@ struct LearningAgent::LearningAgentImpl {
         actionWeights.emplace_back(policyValues(0, availableActions[i]));
       }
 
-      unsigned sampledIndex = util::SoftmaxSample(actionWeights, 1.0f);
+      unsigned sampledIndex = util::SoftmaxSample(actionWeights, 1.0);
       result.emplace_back(GameAction::ACTION(availableActions[sampledIndex]));
     }
 

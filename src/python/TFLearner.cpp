@@ -16,6 +16,7 @@ public:
   virtual ~LearnerInstance() = default;
 
   virtual void Learn(const PolicyLearnBatch &batch) = 0;
+  virtual void LearnValue(const ValueLearnBatch &batch) = 0;
   virtual np::ndarray PolicyFunction(const np::ndarray &state) = 0;
 };
 
@@ -26,6 +27,10 @@ public:
 
   void Learn(const PolicyLearnBatch &batch) override {
     get_override("Learn")(batch);
+  }
+
+  void LearnValue(const ValueLearnBatch &batch) override {
+    get_override("LearnValue")(batch);
   }
 
   np::ndarray PolicyFunction(const np::ndarray &state) override {
@@ -46,6 +51,11 @@ BOOST_PYTHON_MODULE(LearnerFramework) {
       .def_readonly("actionsTaken", &PolicyLearnBatch::actionsTaken)
       .def_readonly("rewardsGained", &PolicyLearnBatch::rewardsGained)
       .def_readonly("learnRate", &PolicyLearnBatch::learnRate);
+
+  bp::class_<ValueLearnBatch>("ValueLearnBatch")
+      .def_readonly("states", &ValueLearnBatch::states)
+      .def_readonly("rewardsGained", &ValueLearnBatch::rewardsGained)
+      .def_readonly("learnRate", &ValueLearnBatch::learnRate);
 
   bp::class_<PyLearnerInstance, boost::noncopyable>("LearnerInstance");
 }
@@ -79,6 +89,15 @@ struct TFLearner::TFLearnerImpl {
     }
   }
 
+  void LearnValue(const ValueLearnBatch &batch) {
+    try {
+      learner.attr("LearnValue")(batch);
+    } catch (const bp::error_already_set &e) {
+      std::cerr << std::endl << python::ParseException() << std::endl;
+      throw e;
+    }
+  }
+
   np::ndarray PolicyFunction(const np::ndarray &state) {
     try {
       return bp::extract<np::ndarray>(learner.attr("PolicyFunction")(state));
@@ -96,6 +115,10 @@ TFLearner::TFLearner(const NetworkSpec &spec) {
 TFLearner::~TFLearner() = default;
 
 void TFLearner::Learn(const PolicyLearnBatch &batch) { impl->Learn(batch); }
+
+void TFLearner::LearnValue(const ValueLearnBatch &batch) {
+  impl->LearnValue(batch);
+}
 
 np::ndarray TFLearner::PolicyFunction(const np::ndarray &state) {
   return impl->PolicyFunction(state);

@@ -37,7 +37,7 @@ struct PlayoutAgent {
 
   void addHistoryToMemory(float finalReward) {
     assert(stateHistory.size() == actionHistory.size());
-    float rewardDiscount = 0.98f;
+    float rewardDiscount = 0.95f;
 
     for (int i = static_cast<int>(stateHistory.size() - 1); i >= 0; i--) {
       memory->AddExperience(

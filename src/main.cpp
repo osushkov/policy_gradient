@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     }
   });
 
-  auto trainedAgent = trainer.TrainAgent(10000000);
+  auto trainedAgent = trainer.TrainAgent(1000000);
 
   // std::ofstream saveFile("agent.dat");
   // trainedAgent->Write(saveFile);
