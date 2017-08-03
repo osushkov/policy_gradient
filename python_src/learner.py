@@ -35,8 +35,8 @@ class Learner(LearnerInstance):
         self.num_outputs = networkSpec.numOutputs
         self.max_batch_size = networkSpec.maxBatchSize
 
-        self.layer_sizes = [self.num_inputs, self.num_inputs / 2]
-        self.value_layer_sizes = [self.num_inputs, self.num_inputs / 2]
+        self.layer_sizes = [self.num_inputs, self.num_inputs / 2, self.num_inputs / 4]
+        self.value_layer_sizes = [self.num_inputs, self.num_inputs / 2, self.num_inputs / 4]
 
         self._buildGraph()
 
@@ -216,7 +216,7 @@ class Learner(LearnerInstance):
             }
 
             output = self.sess.run([self.learn_network_output], feed_dict=feed_dict)[0][:original_input_size, :]
-            if random.randint(0, 1000) == 0:
+            if random.randint(0, 1000) == 0 and False:
                 np.set_printoptions(precision=2)
                 print(output[0])
             return output

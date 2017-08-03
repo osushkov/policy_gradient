@@ -52,7 +52,7 @@ struct LearningAgent::LearningAgentImpl {
 
   void Learn(const vector<ExperienceMoment> &moments, float learnRate) {
     learner->Learn(makePolicyBatch(moments, learnRate));
-    // learner->LearnValue(makeValueBatch(moments, learnRate));
+    learner->LearnValue(makeValueBatch(moments, learnRate));
   }
 
   void Finalise(void) {
@@ -79,8 +79,7 @@ struct LearningAgent::LearningAgentImpl {
 
     return python::PolicyLearnBatch(python::ToNumpy(initialStates),
                                     python::ToNumpy(actionsTaken),
-                                    python::ToNumpy(rewardsGained),
-                                    learnRate);
+                                    python::ToNumpy(rewardsGained), learnRate);
   }
 
   python::ValueLearnBatch
@@ -94,8 +93,7 @@ struct LearningAgent::LearningAgentImpl {
     }
 
     return python::ValueLearnBatch(python::ToNumpy(states),
-                                   python::ToNumpy(rewardsGained),
-                                   learnRate);
+                                   python::ToNumpy(rewardsGained), learnRate);
   }
 
   GameAction sampleAction(const GameState &state, const EVector &encodedState) {
@@ -108,20 +106,21 @@ struct LearningAgent::LearningAgentImpl {
       actionWeights.emplace_back(policyValues(0, availableActions[i]));
     }
 
-    // unsigned bestIndex = 0;
-    // float bestWeight = actionWeights[0];
-    // for (unsigned i = 1; i < actionWeights.size(); i++) {
-    //   if (actionWeights[i] > bestWeight) {
-    //     bestWeight = actionWeights[i];
-    //     bestIndex = i;
-    //   }
-    // }
+    unsigned bestIndex = 0;
+    float bestWeight = actionWeights[0];
+    for (unsigned i = 1; i < actionWeights.size(); i++) {
+      if (actionWeights[i] > bestWeight) {
+        bestWeight = actionWeights[i];
+        bestIndex = i;
+      }
+    }
 
-    unsigned bestIndex = util::SampleFromDistribution(actionWeights);
+    // unsigned bestIndex = util::SampleFromDistribution(actionWeights);
     return GameAction::ACTION(availableActions[bestIndex]);
   }
 
-  vector<GameAction> sampleActions(const vector<pair<GameState *, EVector>> &states) {
+  vector<GameAction>
+  sampleActions(const vector<pair<GameState *, EVector>> &states) {
     assert(states.size() <= MOMENTS_BATCH_SIZE);
 
     EMatrix encodedStates(states.size(), BOARD_WIDTH * BOARD_HEIGHT * 2);
@@ -148,7 +147,9 @@ struct LearningAgent::LearningAgentImpl {
         for (unsigned j = 0; j < availableActions.size(); j++) {
           std::cout << availableActions[j] << ":" << actionWeights[j] << " ";
         }
-        std::cout << "\naction: " << GameAction::ACTION(availableActions[sampledIndex]) << std::endl;
+        std::cout << "\naction: "
+                  << GameAction::ACTION(availableActions[sampledIndex])
+                  << std::endl;
       }
       result.emplace_back(GameAction::ACTION(availableActions[sampledIndex]));
     }
