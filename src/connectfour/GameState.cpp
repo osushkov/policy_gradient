@@ -99,6 +99,18 @@ vector<unsigned> GameState::AvailableActions(void) const {
   return result;
 }
 
+vector<GameAction> GameState::InvalidActions(void) const {
+  const vector<GameAction> &actionSet = GameAction::ALL_ACTIONS();
+
+  vector<GameAction> result;
+  for (unsigned i = 0; i < actionSet.size(); i++) {
+    if (colHeights[actionSet[i].GetColumn()] == BOARD_HEIGHT) {
+      result.push_back(actionSet[i]);
+    }
+  }
+  return result;
+}
+
 GameState GameState::SuccessorState(const GameAction &action) const {
   GameState result(*this);
   result.PlaceToken(action.GetColumn());

@@ -37,13 +37,18 @@ struct PlayoutAgent {
 
   void addHistoryToMemory(float finalReward) {
     assert(stateHistory.size() == actionHistory.size());
-    float rewardDiscount = 0.95f;
+    float rewardDiscount = 0.98f;
 
     for (int i = static_cast<int>(stateHistory.size() - 1); i >= 0; i--) {
       memory->AddExperience(
           ExperienceMoment(stateHistory[i], actionHistory[i], finalReward));
       finalReward *= rewardDiscount;
     }
+  }
+
+  void addIllegalMoveToMemory(const EVector &state, const GameAction &invalidAction) {
+    memory->AddExperience(
+        ExperienceMoment(state, invalidAction, INVALID_ACTION_REWARD));
   }
 };
 
@@ -85,8 +90,8 @@ struct Trainer::TrainerImpl {
             if (doneIters >= iters) {
               break;
             }
-            // this->playoutRoundVsSelf(agent, memory);
-            this->playoutRoundVsRandom(agent, memory);
+            this->playoutRoundVsSelf(agent, memory);
+            // this->playoutRoundVsRandom(agent, memory);
           }
         });
   }
@@ -138,7 +143,7 @@ struct Trainer::TrainerImpl {
       playoutAgents.emplace_back(agent, memory);
     }
 
-    vector<bool> stateActive(curStates.size(), true);
+    vector<bool> stateActive = std::vector<bool>(curStates.size(), true);
 
     unsigned curPlayerIndex = 0;
     while (true) {
@@ -166,6 +171,10 @@ struct Trainer::TrainerImpl {
         PlayoutAgent &curPlayer = playoutAgents[i * 2 + curPlayerIndex];
         PlayoutAgent &otherPlayer =
             playoutAgents[i * 2 + (curPlayerIndex + 1) % 2];
+
+        for (auto invalidAction : curStates[i].InvalidActions()) {
+          curPlayer.addIllegalMoveToMemory(encodedState, invalidAction);
+        }
 
         curPlayer.addMoveToHistory(encodedState, actions[i]);
         curStates[i] = curStates[i].SuccessorState(actions[i]);
@@ -252,6 +261,9 @@ struct Trainer::TrainerImpl {
           playoutAgents[i].addMoveToHistory(encodedState, actions[i]);
         }
 
+        if (rand() % 10000 == 0 && false) {
+          std::cout << actions[i] << std::endl;
+        }
         curStates[i] = curStates[i].SuccessorState(actions[i]);
 
         switch (rules->GameCompletionState(curStates[i])) {
@@ -280,6 +292,8 @@ struct Trainer::TrainerImpl {
   }
 
   GameState generateStartState(void) {
+    // return GameRules::Instance()->InitialState();
+
     GameRules *rules = GameRules::Instance();
 
     RandomAgent agent;

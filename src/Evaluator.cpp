@@ -60,10 +60,10 @@ int Evaluator::runTrial(learning::Agent *primary, learning::Agent *opponent) {
 
   unsigned curPlayerIndex = rand() % agents.size();
   GameState curState(rules->InitialState());
-  curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
-  curState.FlipState();
-  curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
-  curState.FlipState();
+  // curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
+  // curState.FlipState();
+  // curState = curState.SuccessorState(randomAgent.SelectAction(&curState));
+  // curState.FlipState();
 
   while (true) {
     learning::Agent *curPlayer = agents[curPlayerIndex];

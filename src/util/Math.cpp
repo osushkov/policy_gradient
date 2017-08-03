@@ -92,7 +92,13 @@ unsigned util::SoftmaxSample(const std::vector<float> &rawWeights,
 
 unsigned util::SampleFromDistribution(const std::vector<float> &weights) {
   assert(weights.size() > 0);
-  float s = util::RandInterval(0.0f, 1.0f);
+
+  float sumWeights = 0.0f;
+  for (auto w : weights) {
+    sumWeights += w;
+  }
+
+  float s = util::RandInterval(0.0f, sumWeights);
 
   // for (auto w : weights) {
   //   std::cout << " " << w;

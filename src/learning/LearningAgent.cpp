@@ -20,7 +20,7 @@ struct LearningAgent::LearningAgentImpl {
   python::PythonThreadContext ptctx;
   uptr<python::TFLearner> learner;
 
-  LearningAgentImpl() : exploration(0.0f), ptctx(python::GlobalContext()) {
+  LearningAgentImpl() : exploration(1.0f), ptctx(python::GlobalContext()) {
     python::PythonContextLock pl(ptctx);
 
     python::NetworkSpec spec(BOARD_WIDTH * BOARD_HEIGHT * 2,
@@ -38,6 +38,10 @@ struct LearningAgent::LearningAgentImpl {
   vector<GameAction>
   SelectLearningActions(const vector<pair<GameState *, EVector>> &states) {
     auto actions = sampleActions(states);
+
+    // if (rand() % 1000 == 0) {
+    //   std::cout << "exploration: " << exploration << std::endl;
+    // }
     for (unsigned i = 0; i < actions.size(); i++) {
       if (util::RandInterval(0.0, 1.0) < exploration) {
         actions[i] = chooseExplorativeAction(*states[i].first);
@@ -48,7 +52,7 @@ struct LearningAgent::LearningAgentImpl {
 
   void Learn(const vector<ExperienceMoment> &moments, float learnRate) {
     learner->Learn(makePolicyBatch(moments, learnRate));
-    learner->LearnValue(makeValueBatch(moments, learnRate));
+    // learner->LearnValue(makeValueBatch(moments, learnRate));
   }
 
   void Finalise(void) {
@@ -113,7 +117,7 @@ struct LearningAgent::LearningAgentImpl {
     //   }
     // }
 
-    unsigned bestIndex = util::SoftmaxSample(actionWeights, 0.1);
+    unsigned bestIndex = util::SampleFromDistribution(actionWeights);
     return GameAction::ACTION(availableActions[bestIndex]);
   }
 
@@ -134,11 +138,18 @@ struct LearningAgent::LearningAgentImpl {
       assert(availableActions.size() > 0);
 
       vector<float> actionWeights;
-      for (unsigned i = 0; i < availableActions.size(); i++) {
-        actionWeights.emplace_back(policyValues(0, availableActions[i]));
+      for (unsigned j = 0; j < availableActions.size(); j++) {
+        actionWeights.emplace_back(policyValues(i, availableActions[j]));
       }
 
-      unsigned sampledIndex = util::SoftmaxSample(actionWeights, 1.0);
+      unsigned sampledIndex = util::SampleFromDistribution(actionWeights);
+      if (rand() % 1000 == 0 && i == 0 && false) {
+        std::cout << "weights: ";
+        for (unsigned j = 0; j < availableActions.size(); j++) {
+          std::cout << availableActions[j] << ":" << actionWeights[j] << " ";
+        }
+        std::cout << "\naction: " << GameAction::ACTION(availableActions[sampledIndex]) << std::endl;
+      }
       result.emplace_back(GameAction::ACTION(availableActions[sampledIndex]));
     }
 

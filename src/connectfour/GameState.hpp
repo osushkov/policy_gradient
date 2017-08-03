@@ -36,6 +36,8 @@ public:
 
   // Returns indices into the GameAction::ALL_ACTIONS vector.
   vector<unsigned> AvailableActions(void) const; // TODO: this should do a JIT caching
+  vector<GameAction> InvalidActions(void) const;
+
   GameState SuccessorState(const GameAction &action) const;
 };
 }
