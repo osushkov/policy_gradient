@@ -3,28 +3,10 @@ from LearnerFramework import *
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import sonnet as snt
 import math
 import random
 import sys
-
-class NNLayer:
-    def __init__(self, num_inputs, layer_size, activation_func, input_tensor, dropout_keep_prob=None):
-        self.num_inputs = num_inputs
-        self.layer_size = layer_size
-
-        init_range = 1.0 / self.num_inputs
-
-        self.weights = tf.Variable(
-            tf.random_normal([self.num_inputs, self.layer_size], 0.0, init_range),
-            dtype=tf.float32)
-
-        self.bias = tf.Variable(
-            tf.zeros((self.layer_size)), dtype=tf.float32)
-
-        self.layer_output = activation_func(tf.matmul(input_tensor, self.weights) + self.bias)
-
-        if dropout_keep_prob is not None:
-            self.layer_output = tf.nn.dropout(self.layer_output, dropout_keep_prob)
 
 
 class Learner(LearnerInstance):
@@ -50,34 +32,27 @@ class Learner(LearnerInstance):
         self.graph = tf.Graph()
 
         with self.graph.as_default():
-            self.learn_network_input = tf.placeholder(tf.float32, shape=(self.max_batch_size, self.num_inputs))
+            self.learn_network_input = tf.placeholder(tf.float32,
+                                                      shape=(self.max_batch_size, self.num_inputs))
             self.learn_network_action_index = tf.placeholder(tf.int32, shape=(self.max_batch_size))
             self.learn_network_terminal_mask = tf.placeholder(tf.bool, shape=(self.max_batch_size))
             self.learn_network_reward = tf.placeholder(tf.float32, shape=(self.max_batch_size))
             self.learn_rate = tf.placeholder(tf.float32)
-            self.dropout_keep_prob = tf.placeholder(tf.float32)
 
-            self._buildValueNetwork()
-            self._buildLearnNetwork()
+            self._buildValueNetwork(self.learn_network_input)
+            self._buildLearnNetwork(self.learn_network_input)
 
             self.init_op = tf.global_variables_initializer()
 
 
-    def _buildLearnNetwork(self):
-        self.learn_network = []
+    def _buildLearnNetwork(self, network_input):
+        prev_output = network_input
         for ls in self.layer_sizes:
-            if len(self.learn_network) == 0:
-                num_inputs = self.num_inputs
-                input_tensor = self.learn_network_input
-            else:
-                num_inputs = self.learn_network[-1].layer_size
-                input_tensor = self.learn_network[-1].layer_output
+            layer = snt.Linear(ls)
+            prev_output = tf.nn.relu(layer(prev_output))
 
-            self.learn_network.append(NNLayer(num_inputs, ls, tf.nn.relu, input_tensor, self.dropout_keep_prob))
-
-        pl = self.learn_network[-1]
-        self.learn_network.append(NNLayer(pl.layer_size, self.num_outputs, tf.nn.softmax, pl.layer_output))
-        self.learn_network_output = self.learn_network[-1].layer_output
+        output_layer = snt.Linear(self.num_outputs)
+        self.learn_network_output = tf.nn.softmax(output_layer(prev_output))
 
         index_range = tf.constant(np.arange(self.max_batch_size), dtype=tf.int32)
         action_indices = tf.stack([index_range, self.learn_network_action_index], axis=1)
@@ -87,33 +62,20 @@ class Learner(LearnerInstance):
         self.log_output = tf.log(self.indexed_output + 0.000001)
         self.learn_loss = tf.reduce_mean(advantage * tf.negative(self.log_output))
 
-        # advantage = self.learn_network_reward  #tf.stop_gradient(self.learn_network_reward - self._value_network_output)
-        # loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        #     logits=self.learn_network_output, labels=self.learn_network_action_index)
-        # self.learn_loss = tf.reduce_mean(loss * advantage)
-        # average_reward = tf.reduce_mean(self.learn_network_reward)
-
         opt = tf.train.AdamOptimizer(learning_rate=self.learn_rate)
         self.learn_optimizer = opt.minimize(self.learn_loss)
 
-    def _buildValueNetwork(self):
-        self._value_network = []
-
+    def _buildValueNetwork(self, network_input):
+        prev_output = network_input
         for ls in self.value_layer_sizes:
-            if len(self._value_network) == 0:
-                num_inputs = self.num_inputs
-                input_tensor = self.learn_network_input
-            else:
-                num_inputs = self._value_network[-1].layer_size
-                input_tensor = self._value_network[-1].layer_output
+            layer = snt.Linear(ls)
+            prev_output = tf.nn.relu(layer(prev_output))
 
-            self._value_network.append(NNLayer(num_inputs, ls, tf.nn.relu, input_tensor))
+        output_layer = snt.Linear(1)
+        self._value_network_output = tf.nn.tanh(output_layer(prev_output))
 
-        pl = self._value_network[-1]
-        self._value_network.append(NNLayer(pl.layer_size, 1, tf.nn.tanh, pl.layer_output))
-        self._value_network_output = self._value_network[-1].layer_output
-
-        loss = tf.losses.mean_squared_error(self._value_network_output, tf.reshape(self.learn_network_reward, (-1, 1)))
+        loss = tf.losses.mean_squared_error(self._value_network_output,
+                                            tf.reshape(self.learn_network_reward, (-1, 1)))
 
         opt = tf.train.AdamOptimizer(learning_rate=self.learn_rate)
         self.value_optimizer = opt.minimize(loss)
@@ -141,7 +103,6 @@ class Learner(LearnerInstance):
                 self.learn_network_action_index: batch.actionsTaken,
                 self.learn_network_reward: batch.rewardsGained,
                 self.learn_rate: batch.learnRate,
-                self.dropout_keep_prob: 1.0,
             }
 
             _ = self.sess.run(self.learn_optimizer, feed_dict=learn_feed_dict)
@@ -185,7 +146,6 @@ class Learner(LearnerInstance):
                 self.learn_network_input: batch.states,
                 self.learn_network_reward: batch.rewardsGained,
                 self.learn_rate: batch.learnRate,
-                self.dropout_keep_prob: 1.0,
             }
 
             _ = self.sess.run(self.value_optimizer, feed_dict=learn_feed_dict)
@@ -212,7 +172,6 @@ class Learner(LearnerInstance):
         with self.sess.as_default():
             feed_dict = {
                 self.learn_network_input: state,
-                self.dropout_keep_prob: 1.0,
             }
 
             output = self.sess.run([self.learn_network_output], feed_dict=feed_dict)[0][:original_input_size, :]
